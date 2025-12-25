@@ -1,0 +1,8 @@
+<library path="epsilon_mesh_planner">
+    <class name="epsilon_mesh_planner/EpsilonMeshPlanner" type="epsilon_mesh_planner::EpsilonMeshPlanner"
+           base_class_type="mbf_mesh_core::MeshPlanner">
+        <description>
+            The EPSILON Cpnstraint Planner  for mbf_mesh_nav
+        </description>
+    </class>
+</library>

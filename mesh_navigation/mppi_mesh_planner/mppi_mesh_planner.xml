@@ -1,0 +1,8 @@
+<library path="mppi_mesh_planner">
+    <class name="mppi_mesh_planner/MPPIMeshPlanner" type="mppi_mesh_planner::MPPIMeshPlanner"
+           base_class_type="mbf_mesh_core::MeshPlanner">
+        <description>
+            The MPPI Planner  for mbf_mesh_nav
+        </description>
+    </class>
+</library>

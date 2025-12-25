@@ -1,0 +1,8 @@
+<library path="nsga2_mesh_planner">
+    <class name="nsga2_mesh_planner/NSGA2MeshPlanner" type="nsga2_mesh_planner::NSGA2MeshPlanner"
+           base_class_type="mbf_mesh_core::MeshPlanner">
+        <description>
+            The NSGA2 Planner for mbf_mesh_nav
+        </description>
+    </class>
+</library>
