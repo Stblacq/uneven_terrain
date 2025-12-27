@@ -72,65 +72,6 @@ private:
     double* input_buffer_;
     bool tensors_initialized_;
     
-    // OPTIMIZATION: Descriptor cache for repeated positions
-    struct DescriptorCache {
-        static constexpr int GRID_SIZE = 100;
-        static constexpr double CELL_SIZE = 0.5;
-        
-        struct CacheEntry {
-            Vector3d position;
-            std::vector<double> descriptor;
-            bool valid = false;
-        };
-        
-        std::array<CacheEntry, GRID_SIZE * GRID_SIZE> cache_;
-        int hits_ = 0;
-        int misses_ = 0;
-        
-        int hash(const Vector3d& pos) const {
-            int x = static_cast<int>(std::floor(pos.x() / CELL_SIZE)) % GRID_SIZE;
-            int y = static_cast<int>(std::floor(pos.y() / CELL_SIZE)) % GRID_SIZE;
-            if (x < 0) x += GRID_SIZE;
-            if (y < 0) y += GRID_SIZE;
-            return (x * GRID_SIZE + y) % (GRID_SIZE * GRID_SIZE);
-        }
-        
-        bool try_get(const Vector3d& pos, std::vector<double>& out) {
-            int idx = hash(pos);
-            auto& entry = cache_[idx];
-            
-            // Check if cached and close enough (within 10cm)
-            if (entry.valid && (entry.position - pos).norm() < 0.1) {
-                out = entry.descriptor;
-                hits_++;
-                return true;
-            }
-            misses_++;
-            return false;
-        }
-        
-        void put(const Vector3d& pos, const std::vector<double>& descriptor) {
-            int idx = hash(pos);
-            auto& entry = cache_[idx];
-            entry.position = pos;
-            entry.descriptor = descriptor;
-            entry.valid = true;
-        }
-        
-        void clear() {
-            for (auto& entry : cache_) entry.valid = false;
-            hits_ = 0;
-            misses_ = 0;
-        }
-        
-        double hit_rate() const {
-            int total = hits_ + misses_;
-            return total > 0 ? static_cast<double>(hits_) / total : 0.0;
-        }
-    };
-    
-    DescriptorCache descriptor_cache_;
-    
     // Parameters
     double dt_;
     double epsilon_;
@@ -145,10 +86,6 @@ public:
                    double neighborhood_radius = 0.24);
     
     ~TerrainDynamics();
-    
-    // Cache management - call before each planning cycle
-    void reset_cache();
-    double get_cache_hit_rate() const;
     
     // Project point to mesh
     std::pair<Vector3d, Vector3d> project_to_mesh(const Vector3d& query);
