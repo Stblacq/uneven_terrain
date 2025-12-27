@@ -18,8 +18,7 @@ move_base_flex:
     # - with_s: Update with S parameter (more accurate on irregular meshes)
     # - fmm: Fast Marching Method (fastest, slightly less accurate)
     wavefront_update_method: "fmm"
-
-    planners: ['epsilon_planner']
+    planners: ['gakd_planner']
     gakd_planner:
       type: 'gakd_mesh_planner/GAKDMeshPlanner'
       
@@ -37,9 +36,11 @@ move_base_flex:
       
       # Terrain dynamics parameters (only used if use_simplified_dynamics: false)
       mesh_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/gakd_mesh_planner/data/mesh_export.obj'
-      corrections_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/gakd_mesh_planner/data/vertex_corrections.npy'
+      model_dir: '/home/otto/workspaces/RL_ws/src/mesh_navigation/gakd_mesh_planner/data/gp_residual_export'
+      curvature_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/gakd_mesh_planner/data/curvatures.npz'
       dynamics_dt: 0.1                # Time step for dynamics simulation
       dynamics_epsilon: 0.5           # Epsilon for numerical gradient computation
+      neighborhood_radius: 0.16       # Radius for terrain descriptor neighborhood queries (NEW - REQUIRED!)
       
       # Control constraints
       min_velocity: -1.5              # Minimum linear velocity (m/s)
@@ -49,8 +50,8 @@ move_base_flex:
       
       # Genetic Algorithm parameters
       population_size: 100            # Number of individuals in GA population
-      num_generations: 50             # Number of GA generations
-      time_horizon: 10                # Planning horizon (number of time steps)
+      num_generations: 20             # Number of GA generations
+      time_horizon: 5                # Planning horizon (number of time steps)
       mutation_rate: 0.02             # Probability of mutation
       tournament_size: 3              # Number of individuals in tournament selection
       mutation_stddev: 0.1            # Standard deviation for Gaussian mutation noise
@@ -63,154 +64,154 @@ move_base_flex:
       # Mesh projection parameters
       position_projection_radius: 0.4  # Radius for projecting positions onto mesh (m)
  
-    mppi_planner:
-      type: 'mppi_mesh_planner/MPPIMeshPlanner'
+    # mppi_planner:
+    #   type: 'mppi_mesh_planner/MPPIMeshPlanner'
       
-      # Wavefront parameters
-      cost_limit: 0.5
-      goal_dist_offset: 0.3
-      wavefront_update_method: "with_s"
+    #   # Wavefront parameters
+    #   cost_limit: 0.5
+    #   goal_dist_offset: 0.3
+    #   wavefront_update_method: "with_s"
       
-      # Visualization parameters
-      publish_vector_field: true
-      publish_face_vectors: true
+    #   # Visualization parameters
+    #   publish_vector_field: true
+    #   publish_face_vectors: true
       
-      # Dynamics model selection
-      use_simplified_dynamics: true
+    #   # Dynamics model selection
+    #   use_simplified_dynamics: true
       
-      # Terrain dynamics parameters (only used if use_simplified_dynamics: false)
-      mesh_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/gakd_mesh_planner/data/mesh_export.obj'
-      corrections_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/gakd_mesh_planner/data/vertex_corrections.npy'
-      dynamics_dt: 0.1
-      dynamics_epsilon: 0.5
+    #   # Terrain dynamics parameters (only used if use_simplified_dynamics: false)
+    #   mesh_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/mppi_mesh_planner/data/mesh_export.obj'
+    #   corrections_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/mppi_mesh_planner/data/vertex_corrections.npy'
+    #   dynamics_dt: 0.1
+    #   dynamics_epsilon: 0.5
       
-      # MPPI Algorithm parameters
-      num_samples: 1000               # Number of trajectory samples per iteration
-      num_iterations: 5               # Number of MPPI iterations per control step
-      time_horizon: 10                # Planning horizon (number of time steps)
-      lambda: 1.0                     # Temperature parameter (lower = more focused on best samples)
-      noise_stddev_v: 0.5             # Standard deviation of noise for linear velocity
-      noise_stddev_w: 0.3             # Standard deviation of noise for angular velocity
+    #   # MPPI Algorithm parameters
+    #   num_samples: 1000               # Number of trajectory samples per iteration
+    #   num_iterations: 5               # Number of MPPI iterations per control step
+    #   time_horizon: 10                # Planning horizon (number of time steps)
+    #   lambda: 1.0                     # Temperature parameter (lower = more focused on best samples)
+    #   noise_stddev_v: 0.5             # Standard deviation of noise for linear velocity
+    #   noise_stddev_w: 0.3             # Standard deviation of noise for angular velocity
       
-      # Control constraints
-      min_velocity: -1.5              # Minimum linear velocity (m/s)
-      max_velocity: 1.5               # Maximum linear velocity (m/s)
-      min_omega: -1.21832             # Minimum angular velocity (rad/s)
-      max_omega: 1.2832               # Maximum angular velocity (rad/s)
+    #   # Control constraints
+    #   min_velocity: -1.5              # Minimum linear velocity (m/s)
+    #   max_velocity: 1.5               # Maximum linear velocity (m/s)
+    #   min_omega: -1.21832             # Minimum angular velocity (rad/s)
+    #   max_omega: 1.2832               # Maximum angular velocity (rad/s)
       
-      # Cost weights
-      weight_direction: 0.5           # Weight for direction alignment cost
-      weight_smoothness: 0.5          # Weight for control smoothness cost
-      weight_terminal: 10.0           # Weight for terminal (goal distance) cost
+    #   # Cost weights
+    #   weight_direction: 0.5           # Weight for direction alignment cost
+    #   weight_smoothness: 0.5          # Weight for control smoothness cost
+    #   weight_terminal: 10.0           # Weight for terminal (goal distance) cost
       
-      # Execution parameters
-      control_dt: 0.1                 # Time step for control execution (seconds)
-      max_steps: 1000                 # Maximum execution steps before timeout
-      goal_threshold: 0.5             # Distance to goal for success (meters)
-      position_projection_radius: 0.4 # Radius for projecting positions onto mesh (meters)
+    #   # Execution parameters
+    #   control_dt: 0.1                 # Time step for control execution (seconds)
+    #   max_steps: 1000                 # Maximum execution steps before timeout
+    #   goal_threshold: 0.5             # Distance to goal for success (meters)
+    #   position_projection_radius: 0.4 # Radius for projecting positions onto mesh (meters)
 
-    epsilon_planner:
-      type: 'epsilon_mesh_planner/EpsilonMeshPlanner'
+    # epsilon_planner:
+    #   type: 'epsilon_mesh_planner/EpsilonMeshPlanner'
       
-      # Wavefront parameters
-      cost_limit: 0.5
-      goal_dist_offset: 0.3
-      wavefront_update_method: "with_s"
+    #   # Wavefront parameters
+    #   cost_limit: 0.5
+    #   goal_dist_offset: 0.3
+    #   wavefront_update_method: "with_s"
       
-      # Visualization
-      publish_vector_field: true
-      publish_face_vectors: true
+    #   # Visualization
+    #   publish_vector_field: true
+    #   publish_face_vectors: true
       
-      # Dynamics
-      use_simplified_dynamics: false
-      mesh_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/mesh_export.obj'
-      corrections_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/vertex_corrections.npy'
-      descriptors_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/vertex_descriptors.npy'
-      dynamics_dt: 0.1
-      dynamics_epsilon: 0.5
+    #   # Dynamics
+    #   use_simplified_dynamics: false
+    #   mesh_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/mesh_export.obj'
+    #   corrections_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/vertex_corrections.npy'
+    #   descriptors_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/vertex_descriptors.npy'
+    #   dynamics_dt: 0.1
+    #   dynamics_epsilon: 0.5
       
-      # Epsilon-Constraint Parameters
-      num_candidates: 75
-      epsilon_base: 0.5                # Base stability budget (will be adapted based on terrain)
-      alpha_safe: 0.523599             # 30° max deviation from terrain-normal (hard constraint)
+    #   # Epsilon-Constraint Parameters
+    #   num_candidates: 75
+    #   epsilon_base: 0.5                # Base stability budget (will be adapted based on terrain)
+    #   alpha_safe: 0.523599             # 30° max deviation from terrain-normal (hard constraint)
       
-      # Adaptive Epsilon Parameters
-      roughness_adaptation_strength: 0.5  # How much roughness reduces epsilon (0.0 = no effect, 1.0 = max effect)
-      slope_adaptation_strength: 0.3      # How much slope reduces epsilon (0.0 = no effect, 1.0 = max effect)
+    #   # Adaptive Epsilon Parameters
+    #   roughness_adaptation_strength: 0.5  # How much roughness reduces epsilon (0.0 = no effect, 1.0 = max effect)
+    #   slope_adaptation_strength: 0.3      # How much slope reduces epsilon (0.0 = no effect, 1.0 = max effect)
       
-      # Sampling Strategy
-      fmm_bias_strength: 0.8           # 0.0=random, 0.5=balanced, 1.0=pure FMM
-      noise_stddev_v: 0.5
-      noise_stddev_w: 0.3
+    #   # Sampling Strategy
+    #   fmm_bias_strength: 0.8           # 0.0=random, 0.5=balanced, 1.0=pure FMM
+    #   noise_stddev_v: 0.5
+    #   noise_stddev_w: 0.3
       
-      # Control constraints
-      min_velocity: -1.5
-      max_velocity: 1.5
-      min_omega: -3.21832
-      max_omega: 3.2832
+    #   # Control constraints
+    #   min_velocity: -1.5
+    #   max_velocity: 1.5
+    #   min_omega: -3.21832
+    #   max_omega: 3.2832
       
-      # Stability parameters
-      max_roll: 0.349066               # 20° safe angle (no penalty below this)
-      kappa: 10.0                      # Penalty coefficient for violations
-      s_exp: 2.0                       # Goal proximity scaling exponent
+    #   # Stability parameters
+    #   max_roll: 0.349066               # 20° safe angle (no penalty below this)
+    #   kappa: 10.0                      # Penalty coefficient for violations
+    #   s_exp: 2.0                       # Goal proximity scaling exponent
       
-      # Execution
-      time_horizon: 10
-      control_dt: 0.1
-      max_steps: 1000
-      goal_threshold: 0.5
-      position_projection_radius: 0.4
+    #   # Execution
+    #   time_horizon: 10
+    #   control_dt: 0.1
+    #   max_steps: 1000
+    #   goal_threshold: 0.5
+    #   position_projection_radius: 0.4
    
-    nsga2_planner:
-      type: 'nsga2_mesh_planner/NSGA2MeshPlanner'
+    # nsga2_planner:
+    #   type: 'nsga2_mesh_planner/NSGA2MeshPlanner'
       
-      # Wavefront parameters
-      cost_limit: 0.5
-      goal_dist_offset: 0.3
-      wavefront_update_method: "with_s"
+    #   # Wavefront parameters
+    #   cost_limit: 0.5
+    #   goal_dist_offset: 0.3
+    #   wavefront_update_method: "with_s"
       
-      # Visualization parameters
-      publish_vector_field: true      # Enable to visualize the vector field
-      publish_face_vectors: true      # Enable to visualize vectors on individual faces
+    #   # Visualization parameters
+    #   publish_vector_field: true      # Enable to visualize the vector field
+    #   publish_face_vectors: true      # Enable to visualize vectors on individual faces
       
-      # Dynamics model selection
-      use_simplified_dynamics: false  # If true, uses simple 2D dynamics; if false, uses terrain-aware dynamics with GP corrections
+    #   # Dynamics model selection
+    #   use_simplified_dynamics: false  # If true, uses simple 2D dynamics; if false, uses terrain-aware dynamics with GP corrections
       
-      # Terrain dynamics parameters (only used if use_simplified_dynamics: false)
-      mesh_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/nsga2_mesh_planner/data/mesh_export.obj'
-      corrections_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/nsga2_mesh_planner/data/vertex_corrections.npy'
-      descriptors_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/nsga2_mesh_planner/data/vertex_descriptors.npy'
-      dynamics_dt: 0.1                # Time step for dynamics simulation
-      dynamics_epsilon: 0.5           # Epsilon for numerical gradient computation
+    #   # Terrain dynamics parameters (only used if use_simplified_dynamics: false)
+    #   mesh_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/nsga2_mesh_planner/data/mesh_export.obj'
+    #   corrections_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/nsga2_mesh_planner/data/vertex_corrections.npy'
+    #   descriptors_file: '/home/otto/workspaces/RL_ws/src/mesh_navigation/nsga2_mesh_planner/data/vertex_descriptors.npy'
+    #   dynamics_dt: 0.1                # Time step for dynamics simulation
+    #   dynamics_epsilon: 0.5           # Epsilon for numerical gradient computation
       
-      # Control constraints
-      min_velocity: -1.5              # Minimum linear velocity (m/s)
-      max_velocity: 1.5               # Maximum linear velocity (m/s)
-      min_omega: -1.21832             # Minimum angular velocity (rad/s)
-      max_omega: 1.2832               # Maximum angular velocity (rad/s)
+    #   # Control constraints
+    #   min_velocity: -1.5              # Minimum linear velocity (m/s)
+    #   max_velocity: 1.5               # Maximum linear velocity (m/s)
+    #   min_omega: -1.21832             # Minimum angular velocity (rad/s)
+    #   max_omega: 1.2832               # Maximum angular velocity (rad/s)
       
-      # NSGA-II parameters
-      population_size: 100            # Number of individuals in population
-      num_generations: 50             # Number of generations to evolve
-      time_horizon: 10                # Planning horizon (number of time steps)
-      mutation_rate: 0.02             # Probability of mutation per control parameter
-      tournament_size: 3              # Number of individuals in tournament selection
-      mutation_stddev: 0.1            # Standard deviation for Gaussian mutation noise
-      fmm_bias_strength: 0.3          # Fraction of population initialized with FMM guidance (0.0 to 1.0)
+    #   # NSGA-II parameters
+    #   population_size: 100            # Number of individuals in population
+    #   num_generations: 50             # Number of generations to evolve
+    #   time_horizon: 10                # Planning horizon (number of time steps)
+    #   mutation_rate: 0.02             # Probability of mutation per control parameter
+    #   tournament_size: 3              # Number of individuals in tournament selection
+    #   mutation_stddev: 0.1            # Standard deviation for Gaussian mutation noise
+    #   fmm_bias_strength: 0.3          # Fraction of population initialized with FMM guidance (0.0 to 1.0)
       
-      # Stability parameters (for objective F2)
-      alpha_safe: 0.349066            # 20° - safe deviation from terrain-normal (no penalty below this)
-      alpha_max: 0.523599             # 30° - maximum deviation before guaranteed tip-over (hard constraint)
-      kappa: 10.0                     # Penalty coefficient for stability violations in F2
-      s_exp: 2.0                      # Goal proximity scaling exponent
+    #   # Stability parameters (for objective F2)
+    #   alpha_safe: 0.349066            # 20° - safe deviation from terrain-normal (no penalty below this)
+    #   alpha_max: 0.523599             # 30° - maximum deviation before guaranteed tip-over (hard constraint)
+    #   kappa: 10.0                     # Penalty coefficient for stability violations in F2
+    #   s_exp: 2.0                      # Goal proximity scaling exponent
       
-      # Execution parameters
-      control_dt: 0.1                 # Time step for control execution
-      max_steps: 1000                 # Maximum execution steps before giving up
-      goal_threshold: 0.5             # Distance threshold to consider goal reached (m)
+    #   # Execution parameters
+    #   control_dt: 0.1                 # Time step for control execution
+    #   max_steps: 1000                 # Maximum execution steps before giving up
+    #   goal_threshold: 0.5             # Distance threshold to consider goal reached (m)
       
-      # Mesh projection parameters
-      position_projection_radius: 0.4  # Radius for projecting positions onto mesh (m)
+    #   # Mesh projection parameters
+    #   position_projection_radius: 0.4  # Radius for projecting positions onto mesh (m)
       
     planner_patience: 60.0
     planner_max_retries: 2
