@@ -80,16 +80,18 @@ bool MPPIMeshPlanner::initialize(const std::string& plugin_name,
   use_simplified_dynamics_ = node->declare_parameter(name_ + ".use_simplified_dynamics", false);
 
   std::string mesh_file = node->declare_parameter(name_ + ".mesh_file", "data/mesh_export.obj");
-  std::string corrections_file = node->declare_parameter(name_ + ".corrections_file","/data/vertex_corrections.npy");
+  std::string curvature_file = node->declare_parameter(name_ + ".curvature_file", "data/curvatures.npz");
+  std::string gp_params_file = node->declare_parameter(name_ + ".gp_params_file", "data/gp_matrices.npz");
 
   double dt = node->declare_parameter(name_ + ".dynamics_dt", 0.1);
   double epsilon = node->declare_parameter(name_ + ".dynamics_epsilon", 0.5);
+  double neighborhood_radius = node->declare_parameter(name_ + ".neighborhood_radius", 0.16);
 
   if (!use_simplified_dynamics_) {
     try {
-      RCLCPP_INFO(node->get_logger(), "Initializing TerrainDynamics...");
+      RCLCPP_INFO(node->get_logger(), "Initializing TerrainDynamics with CGAL...");
       terrain_dynamics_ = std::make_shared<mppi_mesh_planner::TerrainDynamics>(
-          mesh_file, corrections_file, dt, epsilon);
+          mesh_file, curvature_file, gp_params_file, dt, epsilon, neighborhood_radius);
       RCLCPP_INFO(node->get_logger(), "TerrainDynamics initialized successfully");
     } catch (const std::exception& e) {
       RCLCPP_ERROR(node->get_logger(), "Failed to initialize TerrainDynamics: %s", e.what());

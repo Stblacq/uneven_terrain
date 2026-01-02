@@ -79,19 +79,19 @@ bool EpsilonMeshPlanner::initialize(const std::string& plugin_name,
   // Terrain dynamics
   use_simplified_dynamics_ = node->declare_parameter(name_ + ".use_simplified_dynamics", false);
 
-  std::string mesh_file = node->declare_parameter(name_ + ".mesh_file",
-      "/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/mesh_export.obj");
-  std::string corrections_file = node->declare_parameter(name_ + ".corrections_file",
-      "/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/vertex_corrections.npy");
+  std::string mesh_file = node->declare_parameter(name_ + ".mesh_file","data/mesh_export.obj");
+  std::string curvature_file = node->declare_parameter(name_ + ".curvature_file", "/data/curvatures.npz");
+  std::string gp_params_file = node->declare_parameter(name_ + ".gp_params_file","/data/gp_matrices.npz");
 
   double dt = node->declare_parameter(name_ + ".dynamics_dt", 0.1);
   double epsilon = node->declare_parameter(name_ + ".dynamics_epsilon", 0.5);
+  double neighborhood_radius = node->declare_parameter(name_ + ".neighborhood_radius", 0.16);
 
   if (!use_simplified_dynamics_) {
     try {
-      RCLCPP_INFO(node->get_logger(), "Initializing TerrainDynamics...");
+      RCLCPP_INFO(node->get_logger(), "Initializing TerrainDynamics with CGAL...");
       terrain_dynamics_ = std::make_shared<epsilon_mesh_planner::TerrainDynamics>(
-          mesh_file, corrections_file, dt, epsilon);
+          mesh_file, curvature_file, gp_params_file, dt, epsilon, neighborhood_radius);
       RCLCPP_INFO(node->get_logger(), "TerrainDynamics initialized successfully");
     } catch (const std::exception& e) {
       RCLCPP_ERROR(node->get_logger(), "Failed to initialize TerrainDynamics: %s", e.what());
@@ -115,7 +115,7 @@ bool EpsilonMeshPlanner::initialize(const std::string& plugin_name,
   // FMM biasing parameter
   fmm_bias_strength_ = node->declare_parameter(name_ + ".fmm_bias_strength", 0.5);  // Blend 50% FMM, 50% random
 
-  // Adaptive epsilon parameters (NEW)
+  // Adaptive epsilon parameters 
   // Note: expected_max_roughness_ and expected_max_inclination_ are computed from data, not config
   roughness_adaptation_strength_ = node->declare_parameter(name_ + ".roughness_adaptation_strength", 0.5);
   slope_adaptation_strength_ = node->declare_parameter(name_ + ".slope_adaptation_strength", 0.3);
@@ -139,9 +139,8 @@ bool EpsilonMeshPlanner::initialize(const std::string& plugin_name,
   goal_threshold_ = node->declare_parameter(name_ + ".goal_threshold", 0.5);
   position_projection_radius_ = node->declare_parameter(name_ + ".position_projection_radius", 0.4f);
 
-  // Load precomputed vertex descriptors (REQUIRED)
-  std::string descriptors_file = node->declare_parameter(name_ + ".descriptors_file",
-      "/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/vertex_descriptors.npy");
+  // Load precomputed vertex descriptors
+  std::string descriptors_file = node->declare_parameter(name_ + ".descriptors_file", "/data/vertex_descriptors.npy");
   
   bool descriptors_loaded = false;
   
@@ -170,7 +169,7 @@ bool EpsilonMeshPlanner::initialize(const std::string& plugin_name,
       RCLCPP_INFO(node->get_logger(), "Loaded %zu vertex descriptors", n_vertices);
       descriptors_loaded = true;
       
-      // Compute expected max values from actual data (NEW)
+      // Compute expected max values from actual data
       expected_max_roughness_ = 0.0;
       expected_max_inclination_ = 0.0;
       
@@ -386,7 +385,7 @@ double EpsilonMeshPlanner::computeAdaptiveEpsilon(const TerrainDescriptor& curre
   // Take the more conservative (smaller) factor
   double combined_factor = std::min(roughness_factor, slope_factor);
   
-  // Ensure we don't go below a minimum threshold (e.g., 30% of base)
+  // Ensure we don't go below a minimum threshold
   combined_factor = std::max(0.3, combined_factor);
   
   double adaptive_epsilon = epsilon_base_ * combined_factor;

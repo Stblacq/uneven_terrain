@@ -6,87 +6,79 @@
 #include <array>
 #include <memory>
 #include <string>
-#include <nanoflann.hpp>
+#include <CGAL/Simple_cartesian.h>
+#include <CGAL/AABB_tree.h>
+#include <CGAL/AABB_traits.h>
+#include <CGAL/AABB_triangle_primitive.h>
+#include <CGAL/Sphere_3.h>
+#include "mppi_mesh_planner/native_gp.hpp"
 
 namespace mppi_mesh_planner {
 
 using Eigen::Vector3d;
 using Eigen::MatrixXd;
 
+// CGAL types
+typedef CGAL::Simple_cartesian<double> K;
+typedef K::Point_3 Point;
+typedef K::Triangle_3 Triangle;
+typedef K::Sphere_3 Sphere;
+typedef std::vector<Triangle>::iterator Iterator;
+typedef CGAL::AABB_triangle_primitive<K, Iterator> Primitive;
+typedef CGAL::AABB_traits<K, Primitive> AABB_traits;
+typedef CGAL::AABB_tree<AABB_traits> Tree;
+
 class TerrainDynamics {
 private:
-    // Mesh data
     std::vector<Vector3d> vertices_;
     std::vector<std::array<int,3>> faces_;
     std::vector<Vector3d> face_normals_;
     std::vector<Vector3d> tri_centroids_;
+    std::vector<double> face_areas_;
+    std::vector<Vector3d> vertex_normals_;
     
-    // GP corrections precomputed at vertices (6D: x, y, z, roll, pitch, yaw)
-    std::vector<std::array<double, 6>> vertex_corrections_;
+    std::vector<double> mean_curv_;
+    std::vector<double> gauss_curv_;
     
-    // Simple data structure for nanoflann
-    struct PointCloud {
-        std::vector<std::array<double, 3>> pts;
-        inline size_t kdtree_get_point_count() const { return pts.size(); }
-        inline double kdtree_get_pt(const size_t idx, const size_t dim) const {
-            return pts[idx][dim];
-        }
-        template <class BBOX>
-        bool kdtree_get_bbox(BBOX&) const { return false; }
-        inline double kdtree_distance(const double *p1, const size_t idx_p2, size_t size) const {
-            double dist = 0.0;
-            for (size_t i = 0; i < size; ++i) {
-                const double d = p1[i] - pts[idx_p2][i];
-                dist += d * d;
-            }
-            return dist;
-        }
-    };
+    std::vector<Triangle> cgal_triangles_;
+    std::unique_ptr<Tree> aabb_tree_;
+
+    NativeGP gp_;
     
-    PointCloud cloud_;
-    PointCloud vertex_cloud_;  // KD-tree over vertices for fast correction lookup
-    
-    typedef nanoflann::KDTreeSingleIndexAdaptor<
-        nanoflann::L2_Simple_Adaptor<double, PointCloud>,
-        PointCloud,
-        3,
-        size_t
-    > KDTree;
-    
-    std::unique_ptr<KDTree> kdtree_;
-    std::unique_ptr<KDTree> vertex_kdtree_;  // For O(log n) nearest vertex lookup
-    
-    // Parameters
     double dt_;
     double epsilon_;
-
+    double neighborhood_radius_;
+    
 public:
     TerrainDynamics(const std::string& mesh_file, 
-                    const std::string& corrections_file,
-                    double dt = 0.1,
-                    double epsilon = 0.5);
+                   const std::string& curvature_file,
+                   const std::string& gp_params_file,
+                   double dt = 0.1,
+                   double epsilon = 0.5,
+                   double neighborhood_radius = 0.16);
     
-    ~TerrainDynamics() = default;
+    ~TerrainDynamics();
     
-    // Full dynamics with GP correction
+    std::pair<Vector3d, Vector3d> project_to_mesh(const Vector3d& query);
+    double h(double x, double y);
+    std::vector<double> query_descriptor(const Vector3d& point);
+    std::array<double,6> nominal_dynamics(const std::array<double,6>& state,
+                                         const std::array<double,2>& control,
+                                         double dt = 0.1);
     std::array<double,6> dynamics(const std::array<double,6>& state,
-                                  const std::array<double,2>& control);
-
+                                 const std::array<double,2>& control,
+                                 double dt = 0.1);
+    
 private:
     void load_obj(const std::string& filename);
-    void load_vertex_corrections(const std::string& filename);
+    void load_curvatures(const std::string& filename);
     void compute_face_data();
-    void build_kdtree();
+    void compute_vertex_normals();
+    void build_cgal_tree();
     
-    double h(double x, double y);
-    Vector3d compute_barycentric(const Vector3d& p, 
-                                 const Vector3d& a, 
-                                 const Vector3d& b, 
-                                 const Vector3d& c);
     std::tuple<Vector3d, double, int> nearest_on_surface(const Vector3d& point);
-    std::array<double, 6> interpolate_correction(const Vector3d& position);
-    std::array<double,6> nominal_dynamics(const std::array<double,6>& state,
-                                          const std::array<double,2>& control);
+    Vector3d compute_barycentric(const Vector3d& p, const Vector3d& a,
+                                const Vector3d& b, const Vector3d& c);
 };
 
 } // namespace mppi_mesh_planner

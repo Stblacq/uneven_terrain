@@ -20,9 +20,11 @@ int main() {
         
         mppi_mesh_planner::TerrainDynamics terrain(
             "/home/otto/workspaces/RL_ws/src/mesh_navigation/mppi_mesh_planner/data/mesh_export.obj",
-            "/home/otto/workspaces/RL_ws/src/mesh_navigation/mppi_mesh_planner/data/vertex_corrections.npy",
+            "/home/otto/workspaces/RL_ws/src/mesh_navigation/mppi_mesh_planner/data/curvatures.npz",
+            "/home/otto/workspaces/RL_ws/src/mesh_navigation/mppi_mesh_planner/data/gp_matrices.npz",
             0.1,   // dt
-            0.5    // epsilon
+            0.5,   // epsilon
+            0.16   // neighborhood_radius
         );
         
         auto init_end = std::chrono::high_resolution_clock::now();
@@ -73,20 +75,25 @@ int main() {
         
         // ===== PLANNING PROJECTION =====
         std::cout << "=== Step 4: Planning Performance Projection ===" << std::endl;
-        int pop_size = 100;
-        int generations = 50;
-        int horizon = 10;
-        long long total_calls = (long long)pop_size * generations * horizon;
+        
+        // MPPI-specific parameters
+        int num_samples = 1024;  // Typical MPPI sample count
+        int horizon = 20;        // Typical MPPI horizon
+        int mppi_iterations = 10; // MPPI iterations per planning cycle
+        
+        long long total_calls = (long long)num_samples * horizon * mppi_iterations;
         double estimated_time = (total_calls * avg_duration) / 1000000.0; // seconds
         
-        std::cout << "For Genetic Algorithm with:" << std::endl;
-        std::cout << "  - Population: " << pop_size << std::endl;
-        std::cout << "  - Generations: " << generations << std::endl;
+        std::cout << "For MPPI with:" << std::endl;
+        std::cout << "  - Samples: " << num_samples << std::endl;
         std::cout << "  - Horizon: " << horizon << std::endl;
+        std::cout << "  - Iterations: " << mppi_iterations << std::endl;
         std::cout << "  - Total dynamics() calls: " << total_calls << std::endl;
-        std::cout << "  - Estimated time: " << std::fixed << std::setprecision(2) 
+        std::cout << "  - Estimated time per planning cycle: " << std::fixed << std::setprecision(2) 
                   << estimated_time << " seconds (" 
-                  << estimated_time / 60.0 << " minutes)" << std::endl;
+                  << estimated_time * 1000.0 << " ms)" << std::endl;
+        std::cout << "  - Planning frequency: " << std::fixed << std::setprecision(2)
+                  << 1.0 / estimated_time << " Hz" << std::endl;
         std::cout << std::endl;
         
         // ===== SUMMARY TABLE =====

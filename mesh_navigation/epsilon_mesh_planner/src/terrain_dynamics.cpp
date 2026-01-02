@@ -10,29 +10,41 @@
 namespace epsilon_mesh_planner {
 
 TerrainDynamics::TerrainDynamics(const std::string& mesh_file,
-                                 const std::string& corrections_file,
+                                 const std::string& curvature_file,
+                                 const std::string& gp_params_file,
                                  double dt,
-                                 double epsilon)
-    : dt_(dt), epsilon_(epsilon), has_descriptors_(false) {
+                                 double epsilon,
+                                 double neighborhood_radius)
+    : dt_(dt), epsilon_(epsilon), neighborhood_radius_(neighborhood_radius) {
     
+    std::cout << "=== Initializing TerrainDynamics with CGAL ===" << std::endl;
+    
+    std::cout << "\n1. Loading mesh..." << std::endl;
     load_obj(mesh_file);
+    std::cout << "   Loaded " << vertices_.size() << " vertices, " 
+              << faces_.size() << " faces" << std::endl;
+    
+    std::cout << "\n2. Computing face data..." << std::endl;
     compute_face_data();
-    load_vertex_corrections(corrections_file);
-    build_kdtree();
+    
+    std::cout << "\n3. Computing vertex normals..." << std::endl;
+    compute_vertex_normals();
+    
+    std::cout << "\n4. Loading curvatures..." << std::endl;
+    load_curvatures(curvature_file);
+    std::cout << "   Loaded " << mean_curv_.size() << " curvature values" << std::endl;
+    
+    std::cout << "\n5. Building CGAL AABB tree..." << std::endl;
+    build_cgal_tree();
+    
+    std::cout << "\n6. Loading native GP model..." << std::endl;
+    gp_.load_from_npz(gp_params_file);
+    
+    std::cout << "\n✓ TerrainDynamics initialized successfully!" << std::endl;
+    std::cout << "=========================================\n" << std::endl;
 }
 
-TerrainDynamics::TerrainDynamics(const std::string& mesh_file,
-                                 const std::string& corrections_file,
-                                 const std::string& descriptors_file,
-                                 double dt,
-                                 double epsilon)
-    : dt_(dt), epsilon_(epsilon), has_descriptors_(false) {
-    
-    load_obj(mesh_file);
-    compute_face_data();
-    load_vertex_corrections(corrections_file);
-    load_vertex_descriptors(descriptors_file);
-    build_kdtree();
+TerrainDynamics::~TerrainDynamics() {
 }
 
 void TerrainDynamics::load_obj(const std::string& filename) {
@@ -67,210 +79,96 @@ void TerrainDynamics::load_obj(const std::string& filename) {
             faces_.push_back({a, b, c});
         }
     }
-    
-    std::cout << "Loaded mesh: " << vertices_.size() << " vertices, " 
-              << faces_.size() << " faces" << std::endl;
 }
 
-void TerrainDynamics::load_vertex_corrections(const std::string& filename) {
-    cnpy::NpyArray arr = cnpy::npy_load(filename);
+void TerrainDynamics::load_curvatures(const std::string& filename) {
+    cnpy::npz_t npz = cnpy::npz_load(filename);
     
-    if (arr.shape.size() != 2 || arr.shape[1] != 6) {
-        throw std::runtime_error("Invalid corrections file shape. Expected (N, 6)");
-    }
+    auto mc_arr = npz["mean_curv"];
+    auto gc_arr = npz["gauss_curv"];
     
-    size_t n_vertices = arr.shape[0];
-    if (n_vertices != vertices_.size()) {
-        throw std::runtime_error("Corrections file has " + std::to_string(n_vertices) + 
-                                 " entries but mesh has " + std::to_string(vertices_.size()) + " vertices");
-    }
+    double* mc_data = mc_arr.data<double>();
+    double* gc_data = gc_arr.data<double>();
     
-    double* data = arr.data<double>();
-    vertex_corrections_.resize(n_vertices);
-    
-    for (size_t i = 0; i < n_vertices; ++i) {
-        for (int j = 0; j < 6; ++j) {
-            vertex_corrections_[i][j] = data[i * 6 + j];
-        }
-    }
-    
-    std::cout << "Loaded " << n_vertices << " vertex corrections" << std::endl;
-}
-
-void TerrainDynamics::load_vertex_descriptors(const std::string& filename) {
-    try {
-        cnpy::NpyArray arr = cnpy::npy_load(filename);
-        
-        if (arr.shape.size() != 2 || arr.shape[1] != 8) {
-            throw std::runtime_error("Invalid descriptors file shape. Expected (N, 8)");
-        }
-        
-        size_t n_vertices = arr.shape[0];
-        if (n_vertices != vertices_.size()) {
-            throw std::runtime_error("Descriptors file has " + std::to_string(n_vertices) + 
-                                     " entries but mesh has " + std::to_string(vertices_.size()) + " vertices");
-        }
-        
-        double* data = arr.data<double>();
-        vertex_descriptors_.resize(n_vertices);
-        
-        for (size_t i = 0; i < n_vertices; ++i) {
-            for (int j = 0; j < 8; ++j) {
-                vertex_descriptors_[i][j] = data[i * 8 + j];
-            }
-        }
-        
-        has_descriptors_ = true;
-        std::cout << "Loaded " << n_vertices << " vertex descriptors" << std::endl;
-    } catch (const std::exception& e) {
-        std::cerr << "Warning: Failed to load vertex descriptors: " << e.what() << std::endl;
-        std::cerr << "Descriptors will not be available." << std::endl;
-        has_descriptors_ = false;
-    }
+    size_t n = mc_arr.shape[0];
+    mean_curv_.assign(mc_data, mc_data + n);
+    gauss_curv_.assign(gc_data, gc_data + n);
 }
 
 void TerrainDynamics::compute_face_data() {
     for (const auto& face : faces_) {
-        Vector3d v0 = vertices_[face[0]];
-        Vector3d v1 = vertices_[face[1]];
-        Vector3d v2 = vertices_[face[2]];
-        
-        Vector3d edge1 = v1 - v0;
-        Vector3d edge2 = v2 - v0;
-        Vector3d normal = edge1.cross(edge2);
-        normal.normalize();
-        
-        face_normals_.push_back(normal);
-        tri_centroids_.push_back((v0 + v1 + v2) / 3.0);
-    }
-}
-
-void TerrainDynamics::build_kdtree() {
-    // KD-tree for triangle centroids (used by nearest_on_surface)
-    cloud_.pts.resize(tri_centroids_.size());
-    for (size_t i = 0; i < tri_centroids_.size(); ++i) {
-        cloud_.pts[i][0] = tri_centroids_[i].x();
-        cloud_.pts[i][1] = tri_centroids_[i].y();
-        cloud_.pts[i][2] = tri_centroids_[i].z();
-    }
-    
-    kdtree_ = std::make_unique<KDTree>(3, cloud_, nanoflann::KDTreeSingleIndexAdaptorParams(10));
-    kdtree_->buildIndex();
-    
-    // KD-tree for vertices (used for fast correction and descriptor lookup)
-    vertex_cloud_.pts.resize(vertices_.size());
-    for (size_t i = 0; i < vertices_.size(); ++i) {
-        vertex_cloud_.pts[i][0] = vertices_[i].x();
-        vertex_cloud_.pts[i][1] = vertices_[i].y();
-        vertex_cloud_.pts[i][2] = vertices_[i].z();
-    }
-    
-    vertex_kdtree_ = std::make_unique<KDTree>(3, vertex_cloud_, nanoflann::KDTreeSingleIndexAdaptorParams(10));
-    vertex_kdtree_->buildIndex();
-}
-
-std::array<double, 8> TerrainDynamics::getDescriptorAtPosition(double x, double y, double z) {
-    if (!has_descriptors_) {
-        // Return default descriptor (flat terrain)
-        return {0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    }
-    
-    // Fast O(log n) lookup using vertex KD-tree
-    double query_pt[3] = {x, y, z};
-    size_t nearest_idx;
-    double dist_sq;
-    vertex_kdtree_->knnSearch(query_pt, 1, &nearest_idx, &dist_sq);
-    
-    if (nearest_idx >= vertex_descriptors_.size()) {
-        // Shouldn't happen, but return default if it does
-        return {0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    }
-    
-    return vertex_descriptors_[nearest_idx];
-}
-
-std::tuple<Vector3d, double, int> TerrainDynamics::nearest_on_surface(const Vector3d& point) {
-    const size_t k = 20;
-    std::vector<size_t> indices(k);
-    std::vector<double> dists_sq(k);
-    
-    double query_pt[3] = {point.x(), point.y(), point.z()};
-    kdtree_->knnSearch(query_pt, k, indices.data(), dists_sq.data());
-    
-    double min_dist = std::numeric_limits<double>::max();
-    Vector3d closest_point;
-    int closest_face = -1;
-    
-    for (size_t idx = 0; idx < k; ++idx) {
-        if (dists_sq[idx] >= std::numeric_limits<double>::infinity()) break;
-        
-        size_t i = indices[idx];
-        if (i >= faces_.size()) continue;
-        
-        const auto& face = faces_[i];
         const Vector3d& v0 = vertices_[face[0]];
         const Vector3d& v1 = vertices_[face[1]];
         const Vector3d& v2 = vertices_[face[2]];
         
-        Vector3d edge0 = v1 - v0;
-        Vector3d edge1 = v2 - v0;
-        Vector3d edge2 = point - v0;
+        Vector3d edge1 = v1 - v0;
+        Vector3d edge2 = v2 - v0;
+        Vector3d normal = edge1.cross(edge2);
+        double area = normal.norm() / 2.0;
+        normal.normalize();
         
-        double a = edge0.dot(edge0);
-        double b = edge0.dot(edge1);
-        double c = edge1.dot(edge1);
-        double d = edge0.dot(edge2);
-        double e = edge1.dot(edge2);
+        face_normals_.push_back(normal);
+        face_areas_.push_back(area);
         
-        double det = a * c - b * b;
-        double s = b * e - c * d;
-        double t = b * d - a * e;
+        Vector3d centroid = (v0 + v1 + v2) / 3.0;
+        tri_centroids_.push_back(centroid);
+    }
+}
+
+void TerrainDynamics::compute_vertex_normals() {
+    vertex_normals_.resize(vertices_.size(), Vector3d::Zero());
+    
+    for (size_t i = 0; i < faces_.size(); ++i) {
+        const auto& face = faces_[i];
+        const Vector3d& normal = face_normals_[i];
+        double area = face_areas_[i];
         
-        Vector3d closest;
-        
-        if (s + t <= det) {
-            if (s < 0) {
-                if (t < 0) {
-                    closest = v0;
-                } else {
-                    double u = std::clamp(e / c, 0.0, 1.0);
-                    closest = v0 + u * edge1;
-                }
-            } else if (t < 0) {
-                double u = std::clamp(d / a, 0.0, 1.0);
-                closest = v0 + u * edge0;
-            } else {
-                double invDet = 1.0 / det;
-                s *= invDet;
-                t *= invDet;
-                closest = v0 + s * edge0 + t * edge1;
-            }
-        } else {
-            if (s < 0) {
-                double u = std::clamp((b + e) / (a - 2*b + c), 0.0, 1.0);
-                closest = v1 + u * (v2 - v1);
-            } else if (t < 0) {
-                double u = std::clamp((c + e) / (a - 2*b + c), 0.0, 1.0);
-                closest = v0 + u * (v1 - v0);
-            } else {
-                double u = std::clamp((b + d) / (a - 2*b + c), 0.0, 1.0);
-                closest = v1 + u * (v2 - v1);
-            }
-        }
-        
-        double dist = (point - closest).norm();
-        if (dist < min_dist) {
-            min_dist = dist;
-            closest_point = closest;
-            closest_face = i;
+        for (int j = 0; j < 3; ++j) {
+            vertex_normals_[face[j]] += normal * area;
         }
     }
     
-    if (closest_face == -1) {
-        throw std::runtime_error("Failed to find nearest surface point");
+    for (auto& n : vertex_normals_) {
+        n.normalize();
+    }
+}
+
+void TerrainDynamics::build_cgal_tree() {
+    // Build CGAL triangles
+    cgal_triangles_.clear();
+    for (const auto& face : faces_) {
+        const Vector3d& v0 = vertices_[face[0]];
+        const Vector3d& v1 = vertices_[face[1]];
+        const Vector3d& v2 = vertices_[face[2]];
+        
+        Point p0(v0.x(), v0.y(), v0.z());
+        Point p1(v1.x(), v1.y(), v1.z());
+        Point p2(v2.x(), v2.y(), v2.z());
+        
+        cgal_triangles_.push_back(Triangle(p0, p1, p2));
     }
     
-    return {closest_point, min_dist, closest_face};
+    // Build AABB tree
+    aabb_tree_ = std::make_unique<Tree>(cgal_triangles_.begin(), cgal_triangles_.end());
+    aabb_tree_->accelerate_distance_queries();
+    
+    std::cout << "   Built CGAL AABB tree with " << cgal_triangles_.size() << " triangles" << std::endl;
+}
+
+std::tuple<Vector3d, double, int> TerrainDynamics::nearest_on_surface(const Vector3d& point) {
+    Point query(point.x(), point.y(), point.z());
+    
+    // Query closest point
+    Point closest_pt = aabb_tree_->closest_point(query);
+    
+    // Find which triangle it's on
+    auto hint = aabb_tree_->closest_point_and_primitive(query);
+    int triangle_id = std::distance(cgal_triangles_.begin(), hint.second);
+    
+    Vector3d cp(closest_pt.x(), closest_pt.y(), closest_pt.z());
+    double dist = std::sqrt(CGAL::squared_distance(query, closest_pt));
+    
+    return {cp, dist, triangle_id};
 }
 
 Vector3d TerrainDynamics::compute_barycentric(const Vector3d& p,
@@ -286,65 +184,172 @@ Vector3d TerrainDynamics::compute_barycentric(const Vector3d& p,
     double d11 = v1.dot(v1);
     double d20 = v2.dot(v0);
     double d21 = v2.dot(v1);
+    
     double denom = d00 * d11 - d01 * d01;
+    double v = (d11 * d20 - d01 * d21) / denom;
+    double w = (d00 * d21 - d01 * d20) / denom;
+    double u = 1.0 - v - w;
     
-    Vector3d bary;
-    if (std::abs(denom) < 1e-10) {
-        bary << 1.0/3.0, 1.0/3.0, 1.0/3.0;
-    } else {
-        bary[1] = (d11 * d20 - d01 * d21) / denom;
-        bary[2] = (d00 * d21 - d01 * d20) / denom;
-        bary[0] = 1.0 - bary[1] - bary[2];
-    }
-    
-    bary = bary.cwiseMax(0.0).cwiseMin(1.0);
-    double sum = bary.sum();
-    if (sum > 0) bary /= sum;
-    
-    return bary;
+    return Vector3d(u, v, w);
+}
+
+std::pair<Vector3d, Vector3d> TerrainDynamics::project_to_mesh(const Vector3d& query) {
+    auto [closest_point, dist, tri_idx] = nearest_on_surface(query);
+    Vector3d normal = face_normals_[tri_idx];
+    return {closest_point, normal};
 }
 
 double TerrainDynamics::h(double x, double y) {
-    auto [cp, dist, tri_id] = nearest_on_surface(Vector3d(x, y, 0));
+    auto [cp, normal] = project_to_mesh(Vector3d(x, y, 0));
     return cp.z();
 }
 
-std::array<double, 6> TerrainDynamics::interpolate_correction(const Vector3d& position) {
-    auto [cp, dist, tri_id] = nearest_on_surface(position);
+std::vector<double> TerrainDynamics::query_descriptor(const Vector3d& point) {
+    auto [cp, normal] = project_to_mesh(point);
     
-    if (tri_id < 0 || tri_id >= static_cast<int>(faces_.size())) {
-        return {0, 0, 0, 0, 0, 0};
+    // Use CGAL AABB tree to find nearby triangles efficiently (O(log N))
+    Point query_pt(cp.x(), cp.y(), cp.z());
+    
+    std::vector<int> indices;
+    std::vector<double> distances;
+    std::vector<double> areas;
+    
+    // Create sphere for spatial query (note: CGAL uses squared radius)
+    Sphere search_sphere(query_pt, neighborhood_radius_ * neighborhood_radius_);
+    
+    // Find all triangles intersecting the sphere
+    std::vector<Tree::Primitive_id> intersected_primitives;
+    aabb_tree_->all_intersected_primitives(search_sphere, std::back_inserter(intersected_primitives));
+    
+    // Process intersected triangles and filter by centroid distance
+    for (const auto& prim_id : intersected_primitives) {
+        int tri_idx = std::distance(cgal_triangles_.begin(), prim_id);
+        
+        // Check distance from query point to triangle centroid
+        const Vector3d& centroid = tri_centroids_[tri_idx];
+        double dist = (centroid - cp).norm();
+        
+        if (dist <= neighborhood_radius_) {
+            indices.push_back(tri_idx);
+            distances.push_back(dist);
+            areas.push_back(face_areas_[tri_idx]);
+        }
     }
     
-    const auto& face = faces_[tri_id];
+    if (indices.empty()) {
+        return {normal.x(), normal.y(), normal.z(), 0.0, 0.0, 0.0, 0.0, (point - cp).norm()};
+    }
+    
+    // Compute weighted normal
+    Vector3d weighted_normal = Vector3d::Zero();
+    double total_weight = 0.0;
+    
+    for (size_t i = 0; i < indices.size(); ++i) {
+        int idx = indices[i];
+        // Python: weights = nearby_areas / (dists + 1e-6)
+        double weight = areas[i] / (distances[i] + 1e-6);
+        weighted_normal += face_normals_[idx] * weight;
+        total_weight += weight;
+    }
+    
+    if (total_weight > 1e-12) {
+        weighted_normal /= total_weight;
+        weighted_normal.normalize();
+    } else {
+        weighted_normal = normal;
+    }
+    
+    // Height variation along weighted normal
+    std::vector<double> heights;
+    for (size_t i = 0; i < indices.size(); ++i) {
+        int idx = indices[i];
+        double h = (tri_centroids_[idx] - cp).dot(weighted_normal);
+        heights.push_back(h);
+    }
+    
+    double sigma_z = 0.0;
+    if (heights.size() > 1) {
+        double mean_h = std::accumulate(heights.begin(), heights.end(), 0.0) / heights.size();
+        for (double h : heights) {
+            sigma_z += (h - mean_h) * (h - mean_h);
+        }
+        sigma_z = std::sqrt(sigma_z / heights.size());
+    }
+    
+    // Get curvatures at the closest point using barycentric interpolation
+    // Find which triangle we're on
+    auto [cp2, dist, tri_idx] = nearest_on_surface(point);
+    const auto& face = faces_[tri_idx];
+    
+    // Get barycentric coordinates
     const Vector3d& v0 = vertices_[face[0]];
     const Vector3d& v1 = vertices_[face[1]];
     const Vector3d& v2 = vertices_[face[2]];
-    
     Vector3d bary = compute_barycentric(cp, v0, v1, v2);
     
-    std::array<double, 6> correction = {0, 0, 0, 0, 0, 0};
-    for (int i = 0; i < 6; ++i) {
-        correction[i] = bary[0] * vertex_corrections_[face[0]][i] +
-                       bary[1] * vertex_corrections_[face[1]][i] +
-                       bary[2] * vertex_corrections_[face[2]][i];
+    // Clamp and normalize barycentric coordinates
+    bary = bary.cwiseMax(0.0).cwiseMin(1.0);
+    double bary_sum = bary.sum();
+    if (bary_sum > 0) {
+        bary /= bary_sum;
+    } else {
+        bary = Vector3d(1.0/3.0, 1.0/3.0, 1.0/3.0);
     }
     
-    return correction;
+    // Interpolate curvatures using barycentric coordinates
+    double K = bary[0] * gauss_curv_[face[0]] + 
+               bary[1] * gauss_curv_[face[1]] + 
+               bary[2] * gauss_curv_[face[2]];
+    
+    double H = bary[0] * mean_curv_[face[0]] + 
+               bary[1] * mean_curv_[face[1]] + 
+               bary[2] * mean_curv_[face[2]];
+    
+    // Total area in neighborhood
+    double A_total = std::accumulate(areas.begin(), areas.end(), 0.0);
+    
+    // Distance from query to mesh
+    double distance = (point - cp).norm();
+    
+    return {
+        weighted_normal.x(), weighted_normal.y(), weighted_normal.z(),
+        sigma_z, K, H, A_total, distance
+    };
+}
+
+std::array<double, 8> TerrainDynamics::getDescriptorAtPosition(double x, double y, double z) {
+    Vector3d point(x, y, z);
+    auto descriptor = query_descriptor(point);
+    
+    std::array<double, 8> result;
+    for (size_t i = 0; i < 8 && i < descriptor.size(); ++i) {
+        result[i] = descriptor[i];
+    }
+    
+    return result;
 }
 
 std::array<double,6> TerrainDynamics::nominal_dynamics(
     const std::array<double,6>& state,
-    const std::array<double,2>& control) {
+    const std::array<double,2>& control,
+    double dt) {
     
-    double x = state[0], y = state[1];
-    double theta = state[4], psi = state[5];
-    double u0 = control[0], u1 = control[1];
+    double x = state[0];
+    double y = state[1];
+    double z = state[2];
+    double phi = state[3];
+    double theta = state[4];
+    double psi = state[5];
     
-    double x1 = x + u0 * std::cos(theta) * std::cos(psi) * dt_;
-    double y1 = y + u0 * std::cos(theta) * std::sin(psi) * dt_;
+    double u0 = control[0];
+    double u1 = control[1];
+    
+    // Position update
+    double x1 = x + u0 * std::cos(theta) * std::cos(psi) * dt;
+    double y1 = y + u0 * std::cos(theta) * std::sin(psi) * dt;
     double z1 = h(x1, y1);
     
+    // Gradient computation
     double h_x_plus = h(x1 + epsilon_, y1);
     double h_x_minus = h(x1 - epsilon_, y1);
     double h_y_plus = h(x1, y1 + epsilon_);
@@ -353,35 +358,42 @@ std::array<double,6> TerrainDynamics::nominal_dynamics(
     double delta_x = (h_x_plus - h_x_minus) / (2.0 * epsilon_);
     double delta_y = (h_y_plus - h_y_minus) / (2.0 * epsilon_);
     
+    // Orientation update
     double phi1 = std::atan2(-delta_y, std::sqrt(1.0 + delta_x * delta_x));
     double theta1 = std::atan2(delta_x, std::sqrt(1.0 + delta_y * delta_y));
-    double psi1 = psi + u1 * dt_;
+    double psi1 = psi + u1 * dt;
     
     return {x1, y1, z1, phi1, theta1, psi1};
 }
 
 std::array<double,6> TerrainDynamics::dynamics(
     const std::array<double,6>& state,
-    const std::array<double,2>& control) {
+    const std::array<double,2>& control,
+    double dt) {
     
-    // Nominal prediction
-    auto nominal = nominal_dynamics(state, control);
+    // Get nominal prediction WITH dt
+    auto nominal = nominal_dynamics(state, control, dt);
     
-    // Fast O(log n) lookup: find nearest vertex and use its precomputed correction
-    double query_pt[3] = {state[0], state[1], state[2]};
-    size_t nearest_idx;
-    double dist_sq;
-    vertex_kdtree_->knnSearch(query_pt, 1, &nearest_idx, &dist_sq);
+    // Get terrain descriptor
+    Vector3d position(state[0], state[1], state[2]);
+    auto descriptor = query_descriptor(position);
     
-    const auto& correction = vertex_corrections_[nearest_idx];
+    // Build GP input: [state(6), control(2), descriptor(8)] = 16 features
+    Eigen::VectorXd gp_input(16);
+    for (int i = 0; i < 6; ++i) gp_input[i] = state[i];
+    for (int i = 0; i < 2; ++i) gp_input[6 + i] = control[i];
+    for (int i = 0; i < 8; ++i) gp_input[8 + i] = descriptor[i];
+    
+    // Predict residual
+    Eigen::VectorXd residual = gp_.predict_mean(gp_input);
     
     // Apply correction
-    std::array<double,6> next_state;
+    std::array<double,6> corrected;
     for (int i = 0; i < 6; ++i) {
-        next_state[i] = nominal[i] + correction[i];
+        corrected[i] = nominal[i] + residual[i];
     }
     
-    return next_state;
+    return corrected;
 }
 
 } // namespace epsilon_mesh_planner

@@ -27,6 +27,7 @@ add_library(${PROJECT_NAME}
   src/epsilon_mesh_planner.cpp
   src/data_collector.cpp
   src/wavefront.cpp
+  src/native_gp.cpp 
   src/terrain_dynamics.cpp
 )
 

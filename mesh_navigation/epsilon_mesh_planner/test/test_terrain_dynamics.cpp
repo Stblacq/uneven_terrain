@@ -20,9 +20,11 @@ int main() {
         
         epsilon_mesh_planner::TerrainDynamics terrain(
             "/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/mesh_export.obj",
-            "/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/vertex_corrections.npy",
+            "/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/curvatures.npz",
+            "/home/otto/workspaces/RL_ws/src/mesh_navigation/epsilon_mesh_planner/data/gp_matrices.npz",
             0.1,   // dt
-            0.5    // epsilon
+            0.5,   // epsilon
+            0.16   // neighborhood_radius
         );
         
         auto init_end = std::chrono::high_resolution_clock::now();

@@ -26,6 +26,7 @@ pluginlib_export_plugin_description_file(mbf_mesh_core mppi_mesh_planner.xml)
 add_library(${PROJECT_NAME}
   src/mppi_mesh_planner.cpp
   src/data_collector.cpp
+  src/native_gp.cpp
   src/wavefront.cpp
   src/terrain_dynamics.cpp
 )

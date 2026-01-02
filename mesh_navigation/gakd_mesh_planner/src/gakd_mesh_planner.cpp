@@ -74,8 +74,8 @@ bool GAKDMeshPlanner::initialize(const std::string& plugin_name,
 
   std::string mesh_file = node->declare_parameter(name_ + ".mesh_file","/data/mesh_export.obj");
   std::string curvature_file = node->declare_parameter(name_ + ".curvature_file", "/data/curvatures.npz");
-  std::string model_dir = node->declare_parameter(name_ + ".model_dir", "/data/gp_residual_export");
-  
+  std::string model_file = node->declare_parameter(name_ + ".model_file", "/data/gp_params_native.npz");
+
   double dt = node->declare_parameter(name_ + ".dynamics_dt", 0.1);
   double epsilon = node->declare_parameter(name_ + ".dynamics_epsilon", 0.5);
   double neighborhood_radius = node->declare_parameter(name_ + ".neighborhood_radius", 0.16);
@@ -128,13 +128,13 @@ bool GAKDMeshPlanner::initialize(const std::string& plugin_name,
       RCLCPP_INFO(node->get_logger(), "Initializing TerrainDynamics with GP corrections...");
       RCLCPP_INFO(node->get_logger(), "  mesh_file: %s", mesh_file.c_str());
       RCLCPP_INFO(node->get_logger(), "  curvature_file: %s", curvature_file.c_str());
-      RCLCPP_INFO(node->get_logger(), "  model_dir: %s", model_dir.c_str());
+      RCLCPP_INFO(node->get_logger(), "  model_file: %s", model_file.c_str());
       RCLCPP_INFO(node->get_logger(), "  dt: %.3f, epsilon: %.3f, radius: %.3f", dt, epsilon, neighborhood_radius);
       
       terrain_dynamics_ = std::make_shared<gakd_mesh_planner::TerrainDynamics>(
           mesh_file,
           curvature_file,
-          model_dir,
+          model_file,
           dt,
           epsilon,
           neighborhood_radius
