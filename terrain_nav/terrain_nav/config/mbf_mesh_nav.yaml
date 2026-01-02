@@ -18,7 +18,7 @@ move_base_flex:
     # - with_s: Update with S parameter (more accurate on irregular meshes)
     # - fmm: Fast Marching Method (fastest, slightly less accurate)
     wavefront_update_method: "fmm"
-    planners: ['gakd_planner']
+    planners: ['epsilon_planner']
     gakd_planner:
       type: 'gakd_mesh_planner/GAKDMeshPlanner'
       
