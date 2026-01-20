@@ -20,7 +20,6 @@ find_package(LVR2 REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(CGAL REQUIRED)
 
-# Only cnpy needed (no TensorFlow!)
 set(CNPY_INCLUDE_DIR /usr/local/include)
 set(CNPY_LIBRARY /usr/local/lib/libcnpy.a)
 

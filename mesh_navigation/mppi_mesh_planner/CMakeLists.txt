@@ -15,9 +15,6 @@ find_package(rclcpp REQUIRED)
 find_package(LVR2 REQUIRED)
 find_package(Eigen3 REQUIRED)
 
-# Adjust paths if you installed TensorFlow C API and cnpy system-wide
-set(TENSORFLOW_INCLUDE_DIR /usr/local/include)
-set(TENSORFLOW_LIBRARY /usr/local/lib/libtensorflow.so)
 set(CNPY_INCLUDE_DIR /usr/local/include)
 set(CNPY_LIBRARY /usr/local/lib/libcnpy.a)
 
@@ -36,7 +33,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   $<INSTALL_INTERFACE:include>
   ${LVR2_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIR}
-  ${TENSORFLOW_INCLUDE_DIR}
   ${CNPY_INCLUDE_DIR}
 )
 
@@ -53,7 +49,6 @@ ament_target_dependencies(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
   ${LVR2_LIBRARIES}
   ${MPI_CXX_LIBRARIES}
-  ${TENSORFLOW_LIBRARY}
   ${CNPY_LIBRARY}
 )
 

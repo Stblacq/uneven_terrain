@@ -49,6 +49,48 @@ This demo is designed for **ROS 2 Humble** and requires the following:
 
    Ensure all required packages are sourced and installed. Install external dependencies (`scout_ros2`, `mesh_navigation`, `move_base_flex`) into the same workspace or overlayed ones.
 
+   ```
+    # Core ROS 2 Build Tools
+    sudo apt install ros-humble-ament-cmake
+
+    # ASIO Library (for ugv_sdk)
+    sudo apt install libasio-dev
+
+    # GSL (GNU Scientific Library) for lvr2
+    sudo apt install libgsl-dev
+
+    # OpenCL for mesh processing
+    sudo apt install ocl-icd-opencl-dev opencl-headers
+
+    # CGAL for mesh algorithms
+    sudo apt install libcgal-dev
+
+    # Gazebo simulation
+    sudo apt install ros-humble-ros-gz-sim ros-humble-ros-gz
+
+    # ROS 2 Control
+    sudo apt install ros-humble-controller-manager
+    sudo apt install ros-humble-gz-ros2-control
+    sudo apt install ros-humble-joint-state-broadcaster ros-humble-diff-drive-controller
+
+    # Other ROS packages
+    sudo apt install ros-humble-topic-tools
+    sudo apt install ros-humble-robot-localization
+
+    # TensorFlow C library (manual install)
+    wget https://storage.googleapis.com/tensorflow/libtensorflow/libtensorflow-cpu-linux-x86_64-2.10.0.tar.gz
+    sudo tar -C /usr/local -xzf libtensorflow-cpu-linux-x86_64-2.10.0.tar.gz
+    sudo ldconfig
+
+    # cnpy library (built from source)
+    cd ~/workspaces/RL_ws/src
+    git clone https://github.com/rogersce/cnpy.git
+    cd cnpy && mkdir build && cd build
+    cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON ..
+    make && sudo make install
+    sudo ldconfig
+
+    ```
 3. **Build the Workspace**
 
    ```bash
