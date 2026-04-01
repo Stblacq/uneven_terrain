@@ -95,10 +95,11 @@ move_base_flex:
       noise_stddev_w: 0.3             # Standard deviation of noise for angular velocity
       
       # Control constraints
-      min_velocity: -1.5              # Minimum linear velocity (m/s)
-      max_velocity: 1.5               # Maximum linear velocity (m/s)
-      min_omega: -1.21832             # Minimum angular velocity (rad/s)
-      max_omega: 1.2832               # Maximum angular velocity (rad/s)
+      min_velocity: -1.5
+      max_velocity: 1.5
+      min_omega: -3.21832
+      max_omega: 3.2832
+      
       
       # Cost weights
       weight_direction: 0.5           # Weight for direction alignment cost
@@ -133,7 +134,7 @@ move_base_flex:
       dynamics_epsilon: 0.5
       
       # Epsilon-Constraint Parameters
-      num_candidates: 100
+      num_candidates: 80
       epsilon_base: 0.5                # Base stability budget (will be adapted based on terrain)
       alpha_safe: 0.523599             # 30° max deviation from terrain-normal (hard constraint)
       
@@ -186,8 +187,8 @@ move_base_flex:
       mesh_working_part: 'mesh'
 
       hem: pmp
-      # Cost layers: 'height_diff', 'roughness', 'border', 'inflation'
-      layers: ['border', 'height_diff', 'inflation']
+      # Cost layers: , 'roughness', 'border', 'inflation'
+      layers: ['height_diff']
 
       height_diff:
         type: 'mesh_layers/HeightDiffLayer'
@@ -198,7 +199,7 @@ move_base_flex:
         type: 'mesh_layers/BorderLayer'
         factor: 1.0
         border_cost: 1.0
-        threshold: 0.5
+        threshold: 1.0
 
       roughness:
         type: 'mesh_layers/RoughnessLayer'
