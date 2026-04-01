@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+<model name="inno">
+  <static>true</static>
+  <link name="link">
+    <collision name="collision">
+      <geometry>
+        <mesh>
+          <scale>1 1 1</scale>
+          <uri>meshes/inno.obj</uri>
+        </mesh>
+      </geometry>
+    </collision>
+    <visual name="visual">
+      <geometry>
+        <mesh>
+          <scale>1 1 1</scale>
+          <uri>meshes/inno.obj</uri>
+        </mesh>
+      </geometry>
+    </visual>
+  </link>
+</model>
+</sdf>
